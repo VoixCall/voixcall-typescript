@@ -57,7 +57,9 @@ describe('scripts/fetch-spec.mjs', () => {
   });
 
   it('rejects a non-JSON body and an error status, leaving the file untouched', async () => {
-    expect((await run('<html>')).file).toBe('SENTINEL');
+    const html = await run('<html>');
+    expect(html.exit).toBe(1);
+    expect(html.file).toBe('SENTINEL');
     const r = await run(JSON.stringify(valid), 503);
     expect(r.exit).toBe(1);
     expect(r.file).toBe('SENTINEL');

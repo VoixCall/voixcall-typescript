@@ -187,8 +187,8 @@ Dependabot (`.github/dependabot.yml`) proposes weekly updates for the pinned Git
 
 `.github/workflows/spec-sync.yml` runs daily at 03:17 UTC and on demand (Actions -> spec-sync -> Run workflow). It has two jobs, so no npm, generator or test code runs with write access:
 
-- `regen` (read-only) runs `npm run regen`, then typecheck and tests against the new spec (non-blocking), and checks that the live API's default `VoixCall-Version` equals the SDK's `API_VERSION`. It uploads `openapi.json` and `src/gen` as an artifact.
-- `pr` (the only job with `contents: write` and `pull-requests: write`) checks out, downloads that artifact into place and, if anything changed, opens a pull request from the `spec-sync` branch or updates the one already open. It runs no npm or node steps.
+- `regen` (read-only) runs `npm run regen`, then typecheck and tests against the new spec (non-blocking), and checks that the live API's default `VoixCall-Version` equals the SDK's `API_VERSION` (reported as `unknown`, not a failure, if the API can't be reached). It uploads `openapi.json` and `src/gen` as an artifact.
+- `pr` (the only job with `contents: write` and `pull-requests: write`) checks out, downloads that artifact to a temporary directory outside the workspace, refuses it if it holds a symlink or anything besides `openapi.json` and `src/gen`, copies exactly those two into place and, if anything changed, opens a pull request from the `spec-sync` branch or updates the one already open. It runs no npm or node steps.
 
 The PR body reports the typecheck/test outcome and the version check.
 
