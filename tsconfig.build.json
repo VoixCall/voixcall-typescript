@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "noEmit": false,
+    // The published code must not depend on Node typings (browsers too).
+    "types": [],
+    "sourceMap": false
+  },
+  "include": ["src"]
+}
