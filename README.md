@@ -165,7 +165,7 @@ The API is versioned by date with the `VoixCall-Version` header. The SDK sends t
 
 ```sh
 npm ci
-npm run fetch-spec     # download the live spec into openapi.json (deterministic formatting)
+npm run fetch-spec     # download and validate the live spec into openapi.json (deterministic formatting)
 npm run generate       # regenerate src/gen from the committed openapi.json
 npm run regen          # both
 npm run typecheck && npm test && npm run build
@@ -181,9 +181,16 @@ npm run smoke          # calls production with a fake key; expects Authenticatio
 - **Generated code is up to date**: regenerates `src/gen` from the committed `openapi.json` and fails on any diff. It never fetches the live spec, so pull requests do not depend on the network or on API deploys. Make it a required check.
 - **Typecheck, test, build** on Node 22 and 24, the offline runtime check of the built package, and `npm pack --dry-run`.
 
+Dependabot (`.github/dependabot.yml`) proposes weekly updates for the pinned GitHub Actions and for npm, with the dev dependencies grouped into one PR.
+
 ### How the spec sync works
 
-`.github/workflows/spec-sync.yml` runs daily at 03:17 UTC and on demand (Actions -> spec-sync -> Run workflow). It runs `npm run regen`; if `openapi.json` or `src/gen` changed, it opens a pull request from the `spec-sync` branch, or updates the one already open. The PR body reports whether typecheck and tests passed against the new spec.
+`.github/workflows/spec-sync.yml` runs daily at 03:17 UTC and on demand (Actions -> spec-sync -> Run workflow). It has two jobs, so no npm, generator or test code runs with write access:
+
+- `regen` (read-only) runs `npm run regen`, then typecheck and tests against the new spec (non-blocking), and checks that the live API's default `VoixCall-Version` equals the SDK's `API_VERSION`. It uploads `openapi.json` and `src/gen` as an artifact.
+- `pr` (the only job with `contents: write` and `pull-requests: write`) checks out, downloads that artifact into place and, if anything changed, opens a pull request from the `spec-sync` branch or updates the one already open. It runs no npm or node steps.
+
+The PR body reports the typecheck/test outcome and the version check.
 
 That PR is opened with the built-in `GITHUB_TOKEN`, and **GitHub does not start other workflows for events caused by `GITHUB_TOKEN`**, so CI does not run on it by itself. Before merging a spec-sync PR, run the `ci` workflow on the `spec-sync` branch (Actions -> ci -> Run workflow -> `spec-sync`) or close and reopen the PR, and wait for the checks to pass. If the change is user-visible, update the wrapper and README in the same PR.
 

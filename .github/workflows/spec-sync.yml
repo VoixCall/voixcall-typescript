@@ -4,6 +4,12 @@
 # regenerate src/gen, and if anything changed open or update a PR from the
 # `spec-sync` branch.
 #
+# Two jobs, so that no npm, generator or test code runs with write access:
+# - regen (contents: read) installs, regenerates, typechecks and tests, checks
+#   the live default API version, and uploads openapi.json + src/gen.
+# - pr (contents: write, pull-requests: write) only checks out, downloads the
+#   artifact into place and runs create-pull-request. No node or npm steps.
+#
 # The PR is opened with the built-in GITHUB_TOKEN. GitHub does not start
 # other workflows for events caused by GITHUB_TOKEN, so ci.yml does NOT run
 # on that PR by itself. Before merging, run ci.yml on the spec-sync branch
@@ -28,12 +34,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sync:
-    name: Sync the OpenAPI spec and regenerate
+  regen:
+    name: Fetch the live spec and regenerate
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+    outputs:
+      verify: ${{ steps.verify.outcome }}
+      version: ${{ steps.version.outputs.status }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -51,11 +59,62 @@ jobs:
         run: npm run regen
 
       # Informational: the PR is opened either way, so a breaking API change
-      # shows up as a PR with a failing result instead of a silent job.
+      # shows up as a PR reporting the failure instead of a silent job.
       - name: Typecheck and test against the new spec
         id: verify
         continue-on-error: true
         run: npm run typecheck && npm test
+
+      # The API answers a request without VoixCall-Version with its default
+      # version; it must equal API_VERSION in src/version.ts. Uses no real
+      # credential.
+      - name: Live default API version equals API_VERSION
+        id: version
+        run: |
+          sdk="$(sed -n "s/^export const API_VERSION = '\([^']*\)';$/\1/p" src/version.ts)"
+          live="$(curl -sS --max-time 30 -o /dev/null -D - \
+            -H 'Authorization: Bearer vc_test_not_a_real_key' \
+            https://api.voixcall.com/v1/me \
+            | tr -d '\r' | awk 'tolower($1) == "voixcall-version:" { print $2 }')"
+          if [ -n "$sdk" ] && [ "$live" = "$sdk" ]; then
+            status="match ($live)"
+          else
+            status="MISMATCH: live API default is '${live:-unknown}', SDK API_VERSION is '${sdk:-unknown}'"
+            echo "::warning::$status"
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the regenerated files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: spec-sync
+          path: |
+            openapi.json
+            src/gen/
+          if-no-files-found: error
+          retention-days: 3
+
+  pr:
+    name: Open or update the spec-sync PR
+    needs: regen
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # Remove first so files deleted upstream are deleted here too.
+      - name: Clear the files the artifact replaces
+        run: rm -rf openapi.json src/gen
+
+      - name: Download the regenerated files into place
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: spec-sync
+          path: .
 
       - name: Open or update the spec-sync PR
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
@@ -71,8 +130,9 @@ jobs:
           body: |
             Automated by `.github/workflows/spec-sync.yml`: `npm run regen` against https://api.voixcall.com/v1/openapi.json found changes.
 
-            Typecheck and tests against the new spec in the sync run: **${{ steps.verify.outcome }}**.
+            - Typecheck and tests against the new spec: **${{ needs.regen.outputs.verify }}**
+            - Live default API version vs the SDK's `API_VERSION`: **${{ needs.regen.outputs.version }}**
 
             **CI has not run on this PR.** It was opened with `GITHUB_TOKEN`, which does not trigger other workflows. Before merging, run the `ci` workflow on the `spec-sync` branch (Actions -> ci -> Run workflow) or close and reopen this PR, and wait for the checks.
 
-            If the change is user-visible (a new field, a new endpoint, a changed type), also update the hand-written wrapper, README and `version` as needed.
+            If the change is user-visible (a new field, a new endpoint, a changed type), also update the hand-written wrapper, README and `version` as needed. On a version mismatch, update `API_VERSION` in `src/version.ts`.
