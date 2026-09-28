@@ -126,6 +126,7 @@ jobs:
         run: |
           d="$RUNNER_TEMP/spec-sync"
           if [ -n "$(find "$d" -type l -print -quit)" ]; then echo "::error::artifact contains a symlink"; exit 1; fi
+          if [ -n "$(find "$d" -name .git -print -quit)" ]; then echo "::error::artifact contains .git"; exit 1; fi
           extra="$(cd "$d" && find . -mindepth 1 -maxdepth 1 ! -name openapi.json ! -name src; cd "$d/src" && find . -mindepth 1 -maxdepth 1 ! -name gen)"
           if [ -n "$extra" ]; then echo "::error::unexpected paths in artifact: $extra"; exit 1; fi
           rm -rf openapi.json src/gen
