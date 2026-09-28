@@ -1,0 +1,78 @@
+# Keeps openapi.json and src/gen in step with the live API.
+#
+# Daily (and by hand): download https://api.voixcall.com/v1/openapi.json,
+# regenerate src/gen, and if anything changed open or update a PR from the
+# `spec-sync` branch.
+#
+# The PR is opened with the built-in GITHUB_TOKEN. GitHub does not start
+# other workflows for events caused by GITHUB_TOKEN, so ci.yml does NOT run
+# on that PR by itself. Before merging, run ci.yml on the spec-sync branch
+# (Actions -> ci -> Run workflow -> branch spec-sync) or close and reopen
+# the PR, and wait for the checks to pass.
+#
+# Requires Settings -> Actions -> General -> "Allow GitHub Actions to create
+# and approve pull requests" (repository, and organization if it is locked
+# there). Without it the PR step fails with a 403.
+name: spec-sync
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spec-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync the OpenAPI spec and regenerate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fetch the live spec and regenerate src/gen
+        run: npm run regen
+
+      # Informational: the PR is opened either way, so a breaking API change
+      # shows up as a PR with a failing result instead of a silent job.
+      - name: Typecheck and test against the new spec
+        id: verify
+        continue-on-error: true
+        run: npm run typecheck && npm test
+
+      - name: Open or update the spec-sync PR
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: spec-sync
+          delete-branch: true
+          add-paths: |
+            openapi.json
+            src/gen/**
+          commit-message: 'chore(spec): sync openapi.json from api.voixcall.com and regenerate src/gen'
+          title: 'chore(spec): sync the OpenAPI spec from the live API'
+          body: |
+            Automated by `.github/workflows/spec-sync.yml`: `npm run regen` against https://api.voixcall.com/v1/openapi.json found changes.
+
+            Typecheck and tests against the new spec in the sync run: **${{ steps.verify.outcome }}**.
+
+            **CI has not run on this PR.** It was opened with `GITHUB_TOKEN`, which does not trigger other workflows. Before merging, run the `ci` workflow on the `spec-sync` branch (Actions -> ci -> Run workflow) or close and reopen this PR, and wait for the checks.
+
+            If the change is user-visible (a new field, a new endpoint, a changed type), also update the hand-written wrapper, README and `version` as needed.
