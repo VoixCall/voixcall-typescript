@@ -51,9 +51,9 @@
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.99.0",
-    "@types/node": "22.20.4",
-    "typescript": "5.9.3",
-    "vitest": "3.2.7"
+    "@types/node": "26.6.3",
+    "typescript": "7.0.2",
+    "vitest": "5.0.2"
   },
   "publishConfig": {
     "access": "public"
