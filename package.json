@@ -8,6 +8,10 @@
     "url": "https://github.com/VoixCall/voixcall-typescript/issues",
     "email": "support@voixcall.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VoixCall/voixcall-typescript.git"
+  },
   "keywords": [
     "voixcall",
     "voip",

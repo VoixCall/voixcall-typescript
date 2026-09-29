@@ -10,8 +10,6 @@ The official TypeScript SDK for the [VoixCall API](https://voixcall.com/develope
 
 ## Install
 
-> **Not yet published.** The first npm release is pending; until then, build from this repository (see [Development](#development)).
-
 ```sh
 npm install @voixcall/sdk
 ```
@@ -198,24 +196,20 @@ The workflow needs Settings -> Actions -> General -> **Allow GitHub Actions to c
 
 ### Releasing
 
-Prerequisites, once:
-
-1. The `@voixcall` npm organization, and an npm automation token with publish rights on it.
-2. A GitHub environment named **`npm`** (Settings -> Environments), created **before the first tag**. If a job references an environment that does not exist, GitHub creates it with no protection. Configure it with required reviewers, a deployment tag rule that allows only `v*`, and the token as the **environment secret** `NPM_TOKEN` (not a repository secret).
-
-Each release:
+Releases are currently published **manually** by a maintainer:
 
 1. Bump `version` in `package.json` and `SDK_VERSION` in `src/version.ts` (a test keeps them equal) in a pull request, and merge it.
-2. Tag the merge commit on `main` and push the tag: `git tag v0.1.0 && git push origin v0.1.0`.
-3. `.github/workflows/release.yml` runs the full CI, checks the tagged commit is on `main` and the tag equals `package.json`'s version, runs typecheck, test and build, then waits for an `npm` environment reviewer and runs `npm publish --access public --ignore-scripts`. No lifecycle script runs while `NPM_TOKEN` is set.
+2. From an up-to-date `main`: `npm publish`. The `prepublishOnly` script runs typecheck, tests and the build first, so a failing check stops the release.
+3. Check it: `npm view @voixcall/sdk version`.
+
+Do **not** push `v*` tags for now. `.github/workflows/release.yml` (tag-triggered CI publish from the protected `npm` environment, with `--ignore-scripts`) is kept for a later switch to npm Trusted Publishing, which needs no stored token: configure the trusted publisher on npmjs.com (repository `VoixCall/voixcall-typescript`, workflow `release.yml`, environment `npm`), give the publish job `id-token: write`, and publish with npm 11.5.1 or later.
 
 ### Going public
 
-The package is published without npm provenance for now, because npm only issues provenance from a public source repository. When this repository is made public:
-
-- [ ] In `.github/workflows/release.yml`, switch to the commented-out Publish step (adds `--provenance`) and uncomment `id-token: write` on the publish job.
-- [ ] Add to `package.json`: `"repository": { "type": "git", "url": "git+https://github.com/VoixCall/voixcall-typescript.git" }` (npm checks it against the provenance).
-- [ ] Remove the "Not yet published" note above once the first release is out.
+- [x] Repository made public (2026-09-29), with secret scanning, push protection, private vulnerability reporting, required CI checks on `main` and a required reviewer on the `npm` environment.
+- [x] `repository` added to `package.json` (shows on npm from the next release).
+- [x] First release published (0.1.0, 2026-09-29).
+- [ ] npm provenance: only issued when publishing from CI. Switch on with Trusted Publishing (see Releasing): use the commented-out Publish step in `release.yml` (adds `--provenance`) and uncomment `id-token: write`.
 
 ## Links
 
