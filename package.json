@@ -1,0 +1,57 @@
+{
+  "name": "@voixcall/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for the VoixCall public API (/v1): rates, credits, calls, contacts, numbers and caller ID.",
+  "license": "MIT",
+  "homepage": "https://voixcall.com/developers",
+  "bugs": {
+    "url": "https://github.com/VoixCall/voixcall-typescript/issues",
+    "email": "support@voixcall.com"
+  },
+  "keywords": [
+    "voixcall",
+    "voip",
+    "calls",
+    "api",
+    "sdk"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "fetch-spec": "node scripts/fetch-spec.mjs",
+    "generate": "openapi-ts",
+    "regen": "npm run fetch-spec && npm run generate",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "check:runtime": "node scripts/runtime-check.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "@types/node": "22.20.4",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

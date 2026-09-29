@@ -1,0 +1,87 @@
+# Publish @voixcall/sdk to npm.
+#
+# On a tag v<version> (for example v0.1.0) that points at a commit on main:
+# run the full CI (ci.yml), then publish from the `npm` environment.
+#
+# The `npm` environment must exist BEFORE the first tag, with required
+# reviewers, a deployment tag rule allowing only v*, and NPM_TOKEN (npm
+# automation token with publish rights on @voixcall) as an ENVIRONMENT
+# secret. If it does not exist, GitHub creates it on first use with no
+# protection.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  publish:
+    name: Publish to npm
+    needs: [ci]
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      # WHEN THE REPO GOES PUBLIC (provenance), uncomment:
+      # id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Only publish commits on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main."
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Tag matches package.json version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg"
+            exit 1
+          fi
+
+      # Install, test and build run WITHOUT the token in the environment.
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # --ignore-scripts: no lifecycle script (prepublishOnly, dev-dependency
+      # code) runs while NPM_TOKEN is set. The package was built above.
+      - name: Publish
+        run: npm publish --access public --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # ------------------------------------------------------------------
+      # WHEN THE REPO GOES PUBLIC: replace the Publish step above with this
+      # one (adds --provenance), uncomment `id-token: write` above, and add
+      # "repository" to package.json (see README, "Going public").
+      #
+      # - name: Publish
+      #   run: npm publish --access public --ignore-scripts --provenance
+      #   env:
+      #     NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # ------------------------------------------------------------------

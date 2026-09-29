@@ -1,0 +1,89 @@
+# CI for @voixcall/sdk.
+#
+# Every PR and every push to main:
+# - "Generated code is up to date": regenerates src/gen from the COMMITTED
+#   openapi.json and fails on any diff. It never fetches the live spec, so a
+#   PR cannot flake on the network or on an API deploy; spec-sync.yml picks
+#   up live changes. Make this a required check.
+# - Typecheck, test and build on Node 22 and 24, then an offline check of the
+#   built package and its packed contents.
+#
+# Also callable (release.yml runs it before publishing) and runnable by hand,
+# for example on the spec-sync branch, whose PRs are opened with GITHUB_TOKEN
+# and so do not trigger this workflow on their own.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Generated code is up to date
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: openapi.json is in the canonical format written by fetch-spec
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const raw = fs.readFileSync("openapi.json", "utf8");
+            if (raw !== JSON.stringify(JSON.parse(raw), null, 2) + "\n") {
+              console.error("::error::openapi.json is not in the format npm run fetch-spec writes. Run npm run regen and commit the result.");
+              process.exit(1);
+            }'
+
+      - name: Regenerate src/gen from the committed openapi.json
+        run: npm run generate
+
+      - name: Fail on drift
+        run: |
+          git add -N src/gen
+          if ! git diff --exit-code -- src/gen; then
+            echo "::error::src/gen does not match openapi.json. Run 'npm run generate' and commit src/gen (never edit it by hand)."
+            exit 1
+          fi
+
+  test:
+    name: Typecheck, test, build (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Built package works offline
+        run: npm run check:runtime
+      - name: Package contents
+        run: npm pack --dry-run
