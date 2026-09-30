@@ -361,7 +361,7 @@ export type ReferenceNumber = {
 
 export type Transaction = {
     /**
-     * Signed change to the balance, decimal string.
+     * Signed change to the balance, decimal string: negative for money taken from the balance (deduction: call, SMS, recording, transcription and number charges; refund: a store refund clawed back from the balance; debit: manual charges and transfers out), positive for money added (purchase, addition, promotion; credit: manual credits); adjustment carries its own sign. balance_after is the balance recorded after this entry. Amounts are rounded to cents, so a running sum of amounts can differ from balance_after by rounding.
      */
     amount: string;
     /**
@@ -378,7 +378,7 @@ export type Transaction = {
      */
     object: 'transaction';
     /**
-     * purchase, deduction, refund, promotion, adjustment or addition; new types may appear.
+     * purchase, deduction, refund, debit, credit, promotion, adjustment or addition; new types may appear.
      */
     type: string;
 };
