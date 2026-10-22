@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { GetBalanceData, GetBalanceErrors, GetBalanceResponses, GetCallData, GetCallerIdData, GetCallerIdErrors, GetCallerIdResponses, GetCallErrors, GetCallResponses, GetMeData, GetMeErrors, GetMeResponses, GetRateData, GetRateErrors, GetRateResponses, ListCallsData, ListCallsErrors, ListCallsResponses, ListNumbersData, ListNumbersErrors, ListNumbersResponses, ListTransactionsData, ListTransactionsErrors, ListTransactionsResponses, SearchContactsData, SearchContactsErrors, SearchContactsResponses } from './types.gen.js';
+import type { GetBalanceData, GetBalanceErrors, GetBalanceResponses, GetCallData, GetCallerIdData, GetCallerIdErrors, GetCallerIdResponses, GetCallErrors, GetCallResponses, GetCallTranscriptData, GetCallTranscriptErrors, GetCallTranscriptResponses, GetMeData, GetMeErrors, GetMeResponses, GetRateData, GetRateErrors, GetRateResponses, ListCallsData, ListCallsErrors, ListCallsResponses, ListMessagesData, ListMessagesErrors, ListMessagesResponses, ListMessageThreadsData, ListMessageThreadsErrors, ListMessageThreadsResponses, ListNumbersData, ListNumbersErrors, ListNumbersResponses, ListTransactionsData, ListTransactionsErrors, ListTransactionsResponses, RequestCallTranscriptData, RequestCallTranscriptErrors, RequestCallTranscriptResponses, SearchContactsData, SearchContactsErrors, SearchContactsResponses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -59,7 +59,7 @@ export const listCalls = <ThrowOnError extends boolean = false>(options?: Option
 /**
  * Get a call
  *
- * One call by id. While the call is active, cost_so_far is set (counted from started_at, so it includes ring time until answered_at is recorded), and max_duration_seconds with credits:read. transcript is always null: reading call summaries through connected apps is not enabled yet, so expand[]=transcript answers 403 summaries_not_enabled. A call that is not yours is not found. Requires calls:read.
+ * One call by id. While the call is active, cost_so_far is set (counted from started_at, so it includes ring time until answered_at is recorded), and max_duration_seconds with credits:read. With expand[]=transcript (transcripts:read and the account setting "Allow connected apps to read call summaries"), transcript is the redacted summary-level transcript; when the setting is off the answer is 403 not_enabled with settings_url. A call that is not yours is not found. Requires calls:read.
  */
 export const getCall = <ThrowOnError extends boolean = false>(options: Options<GetCallData, ThrowOnError>): RequestResult<GetCallResponses, GetCallErrors, ThrowOnError> => (options.client ?? client).get<GetCallResponses, GetCallErrors, ThrowOnError>({
     security: [{
@@ -72,6 +72,44 @@ export const getCall = <ThrowOnError extends boolean = false>(options: Options<G
             type: 'http'
         }],
     url: '/calls/{id}',
+    ...options
+});
+
+/**
+ * Get a call's transcript
+ *
+ * The call's transcript: AI summary, action items and reference numbers, and with include=utterances the speaker turns. All text is redacted. In utterances every number (digits or spelled out) and keypad (DTMF) entry reads [redacted]. The summary, each action item and each reference number (label and value together) have every number read [redacted] when the item holds six or more digits in all, or a word such as code, OTP, PIN, password, card or account; otherwise short numbers such as dates, times and amounts stay. Needs transcripts:read and the account setting "Allow connected apps to read call summaries" (Settings → Connected apps, off by default); when it is off the answer is 403 not_enabled with settings_url. A call that is not yours is 404 call_not_found; a call without a transcript is 404 transcript_not_found (the message says whether one can be requested and its cost). Personal calls only. Every read is recorded in the account's audit log.
+ */
+export const getCallTranscript = <ThrowOnError extends boolean = false>(options: Options<GetCallTranscriptData, ThrowOnError>): RequestResult<GetCallTranscriptResponses, GetCallTranscriptErrors, ThrowOnError> => (options.client ?? client).get<GetCallTranscriptResponses, GetCallTranscriptErrors, ThrowOnError>({
+    security: [{
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        }, {
+            key: 'apiKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/calls/{id}/transcript',
+    ...options
+});
+
+/**
+ * Request a call transcript
+ *
+ * Asks for a transcript and summary of a recorded call that has none, through the same pipeline as the app's "Transcribe this call" button. It costs money: cost in the response is the transcription rate per started minute of recording, charged when the transcript completes (never on failure). Needs transcripts:read and calls:place, the account setting "Allow connected apps to read call summaries" (else 403 not_enabled) and an Idempotency-Key header. 402 insufficient_credits when the balance cannot cover it, 402 call_too_short for a recording too short to transcribe, 409 transcript_exists when the call already has one, 409 transcription_in_progress while another requested transcript is being made, 409 recording_unavailable when the call has no saved recording. Poll GET /v1/calls/{id}/transcript for the result.
+ */
+export const requestCallTranscript = <ThrowOnError extends boolean = false>(options: Options<RequestCallTranscriptData, ThrowOnError>): RequestResult<RequestCallTranscriptResponses, RequestCallTranscriptErrors, ThrowOnError> => (options.client ?? client).post<RequestCallTranscriptResponses, RequestCallTranscriptErrors, ThrowOnError>({
+    security: [{
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        }, {
+            key: 'apiKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/calls/{id}/transcript',
     ...options
 });
 
@@ -148,6 +186,44 @@ export const getMe = <ThrowOnError extends boolean = false>(options?: Options<Ge
             type: 'http'
         }],
     url: '/me',
+    ...options
+});
+
+/**
+ * List recent messages on a number
+ *
+ * Text messages received on one of your VoixCall numbers in the last window_minutes (default 10), newest first. The number must be opted in by its owner (Settings → Connected apps); otherwise 403 not_enabled with settings_url. An unknown number, or one that is not yours, is 404 number_not_found. A window above 10 minutes needs messages:history. Bodies are third-party text, cut to 500 bytes; attachments are presigned URLs valid for 5 minutes, and attachments not yet stored by VoixCall are omitted. Reads are limited to 10 per minute per number and recorded in your account's audit log. Organization numbers never appear. Test keys get 404. Requires messages:read.
+ */
+export const listMessages = <ThrowOnError extends boolean = false>(options: Options<ListMessagesData, ThrowOnError>): RequestResult<ListMessagesResponses, ListMessagesErrors, ThrowOnError> => (options.client ?? client).get<ListMessagesResponses, ListMessagesErrors, ThrowOnError>({
+    security: [{
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        }, {
+            key: 'apiKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/messages',
+    ...options
+});
+
+/**
+ * List message threads on a number
+ *
+ * One entry per sender on one of your opted-in VoixCall numbers, most recent activity first, with the message count and a preview of the latest message (third-party text, at most 500 bytes). Same opt-in, ownership and per-number limits as list-messages. Requires messages:history.
+ */
+export const listMessageThreads = <ThrowOnError extends boolean = false>(options: Options<ListMessageThreadsData, ThrowOnError>): RequestResult<ListMessageThreadsResponses, ListMessageThreadsErrors, ThrowOnError> => (options.client ?? client).get<ListMessageThreadsResponses, ListMessageThreadsErrors, ThrowOnError>({
+    security: [{
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        }, {
+            key: 'apiKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/messages/threads',
     ...options
 });
 
